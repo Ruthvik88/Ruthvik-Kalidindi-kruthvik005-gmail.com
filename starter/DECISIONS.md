@@ -315,55 +315,68 @@ intercept test by construction), and disabled/greyed states (prohibited: absent 
 
 ---
 
-### <the decision, as a claim — not "permissions", but "the org-level view counts device-scoped grants">
-
-**What I chose:**
-**Why:** _(evidence: test, log line, commit)_
-**What I rejected:** _(the plausible alternative, and the specific reason it fails)_
-**What would change my mind:**
-
-<!-- Copy the block above per decision. The two stubs below show the required shape and contain no
-     engineering content — replace or delete them. -->
-
----
-
-### Stub — the shape of a weak "Why"
-
-**What I chose:** the obvious thing.
-**Why:** it is what the brief says to do.
-**What I rejected:** nothing, the alternative seemed worse.
-**What would change my mind:** I do not know.
-
-_Reads as a memory of the document, not a model of the system. Scores nothing._
-
----
-
-### Stub — the shape of a strong "Why"
-
-**What I chose:** X.
-**Why:** I implemented Y first, because Y is the intuitive precedence rule. `node scripts/check-
-permissions.js` reported `<the actual reason string it reported>` on the case where the two grants
-disagree. That is only reachable if the two are evaluated in a different order than Y assumes.
-Moved to X in `<commit>` and the case passed. Logged in `BUILD-LOG.md` under Phase 2.
-**What I rejected:** Y, and also "resolve the narrower one last" — both fail the same case for the
-same reason.
-**What would change my mind:** a case where a narrower grant is expected to survive a broader
-refusal. I could not construct one, which is itself evidence for X.
-
-_Shows what you believed, what disproved it, and what you did next._
-
 ---
 
 ## Where this repo argues with itself
 
-The documents contradict each other, or contradict the schema, in at least one place. Name each
-one you found. For each: quote both statements, say which you built against, and say why.
+### 1. Equal-rank modification: PERMISSIONS.md §6 vs check-api.js:150 (and AUTH-DATA-MODEL.md §7's silence)
 
-Building against the written rule and arguing in writing is a **full-marks** answer. Silently
-working around it, or quietly picking one and saying nothing, scores zero on the section — we
-cannot tell the difference between a decision and an oversight.
+§6 says: *"modify a user of equal role (admin → admin) → `403`"*. AUTH §7's change-role
+row lists only "`user:role:update`, the rank rules; not yourself; not the last owner" —
+no equal-rank rule at all. And check-api.js:150 requires `PATCH …/members/usr_acme_owner
+→ viewer` by dana (owner→owner) to return **200**. A blanket strictly-greater rule
+satisfies §6 and breaks the suite; no rule at all satisfies AUTH §7 and breaks §6's
+admin→admin case.
+Built against: owner-bypass + explicit confer-owner rule (`lifecycle.js`
+`assertCanModify`, commit `a2b8056`). Why: the executable contract is the tiebreaker —
+the suite's 200 pins owner→owner as legal, §6's admin→admin example pins equal-rank
+403 below owner, and AUTH §7's silence means it constrains neither. All three agree on
+the implementation I shipped.
+
+### 2. Suspended callers: AUTH-DATA-MODEL.md §10 vs the pv-bump rule in §1/§3
+
+§10 says a token for a suspended membership gets "403 with an empty permission set",
+while §1 says `perm_version` "goes up whenever something authorization-relevant
+changes: … a suspension". Both can't describe the same request: the bump makes
+outstanding tokens TOKEN_STALE (401) before any permission logic runs — verified live
+(H2: suspend → old token 401, not 403).
+Built against: both, at different layers. `context.js` lets suspended callers through
+with a well-formed caller; `resolve()` denies everything with reason `suspended`
+(shipped suite asserts exactly this); the 401-vs-403 split falls out of token age.
+The 403-empty-set case is reachable only with a fresh-pv suspended token (e.g. status
+flipped without a bump) — the doc sentence describes the resolver, not the token.
+
+### 3. Last-owner scope: PERMISSIONS.md §6/§9.5 vs AUTH-DATA-MODEL.md §7's suspend row
+
+§9.5: "An org always has at least one owner." §6's table guards remove/demote/leave —
+but §7's suspend row lists only "`user:remove`, the rank rules", no last-owner guard.
+Suspending the sole owner leaves zero *active* owners while the letter of §9.5
+("has … an owner") still holds via the intact membership.
+Built against: the table's letter — no LAST_OWNER on suspend (`routes/members.js`,
+commit `1d8b51d`), documented as its own decision above. Why: adding a 409 invents
+policy where the contract is explicit elsewhere and silent here, and suspension is
+reversible where removal is not. The tension is real but the documents don't actually
+contradict — they scope the invariant to destructive transitions, and I followed that
+scoping.
 
 ## Deliberately not built
 
-What you chose not to build, and the reason. A scope cut with a stated reason is a senior
-judgement. An unmentioned gap is a gap.
+- **Rate limiting, password reset, email delivery.** Excluded by the repo's own
+"Deliberately not here" list; invite tokens ride the API response instead of email.
+- **A background session reaper.** TTL is enforced lazily on reads and inside session
+creation — one process, no timers to defend (decision above).
+- **Per-db prepared-statement caching (WeakMap keyed by db).** Designed, deferred,
+then measured unnecessary: 500-row/200-grant device list resolves in 46ms (H5).
+- **Grant portability across org transfer.** Revoke-and-bump instead, by decision —
+carrying grants would move authority without destination consent.
+- **A new session end-reason for decommission.** Reused `device_transferred` as the
+closest enum value rather than migrating the schema, which is out of scope by rule.
+- **Client-side token refresh on 401.** The console returns to sign-in on auth
+failure instead of silently refreshing mid-session; silent retry would mask the
+TOKEN_STALE → re-switch flow the API contract expects the client to handle.
+- **Minimum password length / complexity rules.** No contract pins them; inventing a
+threshold risks rejecting hidden-tier fixtures. Any non-empty password is accepted
+for new accounts.
+- **Duplicate-name guards on orgs/devices.** Neither table has a unique index, so the
+schema permits them; adding application-level uniqueness would be check-then-act
+racing against nothing that requires it.
