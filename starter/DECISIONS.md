@@ -65,6 +65,23 @@ resolve but asserts nothing about it; checked before committing).
 
 ---
 
+### assertMayGrant requires holding every permission a wildcard covers
+
+**What I chose:** expand each requested pattern against the live catalogue
+(`matchesPattern` over `permissions` keys) and require `allow` on every covered
+permission at the grant's scope — one `resolve()` for all patterns.
+**Why:** granting `device:*` while missing one device permission would launder
+authority the caller cannot exercise (D9). `check-permissions.js` §9 plus the
+review of this slice pin the behavior; full board 35/35 + 18/18 + 43/43.
+**What I rejected:** holding "any" covered permission (lets one held perm launder the
+rest), and putting self-grant rejection here (the signature has no target userId —
+inventing it would couple resolution to route params; Phase 4 route owns it).
+**What would change my mind:** a spec case where partial wildcard holding may grant —
+PERMISSIONS.md §8 validation table says the caller must hold "every permission being
+granted", which is exactly this rule.
+
+---
+
 ### <the decision, as a claim — not "permissions", but "the org-level view counts device-scoped grants">
 
 **What I chose:**

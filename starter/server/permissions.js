@@ -21,11 +21,7 @@
 // it that this exercise's prose never mentions. Read the tables; do not encode the
 // documented matrix. Run `npm run personalisation` to see what you are dealing with.
 
-const todo = (name) =>
-  Object.assign(
-    new Error(`TODO: server/permissions.js — ${name}() is yours to write (BRIEF.md §3).`),
-    { code: 'NOT_IMPLEMENTED' }
-  );
+import { forbidden, badRequest } from './http.js';
 
 export const MODE_PERMISSION = { view: 'device:view', control: 'device:control', terminal: 'device:terminal' };
 
@@ -206,21 +202,49 @@ export function resolveDevices(db, { userId, orgId, deviceIds, now = new Date() 
 }
 
 export function can(db, ctx, permission, deviceId) {
-  throw todo('can');
+  return resolve(db, { userId: ctx.userId, orgId: ctx.orgId, deviceId: deviceId ?? null }).permissions[permission]?.effect === 'allow';
 }
 
 // Throws 403 carrying the reason code, so a refusal is debuggable.
 export function assertCan(db, ctx, permission, deviceId) {
-  throw todo('assertCan');
+  const entry = resolve(db, { userId: ctx.userId, orgId: ctx.orgId, deviceId: deviceId ?? null }).permissions[permission];
+  if (!entry || entry.effect !== 'allow') {
+    throw forbidden(`missing permission ${permission}`, entry?.reason ?? 'implicit');
+  }
+  return entry;
 }
 
 // No privilege laundering: you may only grant authority you hold at that scope.
+// One resolve for all patterns; a wildcard requires holding EVERY permission it
+// covers (granting device:* while missing one device perm would launder it).
+// Self-grants are rejected by the caller (the route knows the target user; this
+// function never sees it).
 export function assertMayGrant(db, ctx, patterns, deviceId = null) {
-  throw todo('assertMayGrant');
+  const { keys, permissions } = resolve(db, { userId: ctx.userId, orgId: ctx.orgId, deviceId });
+  for (const pattern of patterns) {
+    const covered = keys.filter((k) => matchesPattern(k, pattern));
+    if (covered.length === 0) throw forbidden(`cannot grant unknown permission pattern ${pattern}`, 'missing_permission');
+    for (const key of covered) {
+      if (permissions[key].effect !== 'allow') {
+        throw forbidden(`cannot grant ${pattern}: missing ${key}`, permissions[key].reason ?? 'implicit');
+      }
+    }
+  }
 }
 
-// The compound check: session:start AND the permission for the requested mode, and a
-// refusal must distinguish WHICH of the two was missing.
+// The compound check: session:start AND the permission for the requested mode,
+// both on the same device — read from ONE resolution so the refusal can say
+// WHICH of the two was missing. session:start first: lacking it means "you
+// can't open sessions at all" (missing_permission); lacking only the mode
+// permission means "not on this device" (missing_device_permission).
 export function assertCanStartSession(db, ctx, mode, deviceId) {
-  throw todo('assertCanStartSession');
+  const modePermission = MODE_PERMISSION[mode];
+  if (!modePermission) throw badRequest(`unknown session mode ${mode}`);
+  const { permissions } = resolve(db, { userId: ctx.userId, orgId: ctx.orgId, deviceId });
+  if (permissions['session:start']?.effect !== 'allow') {
+    throw forbidden('missing permission session:start', 'missing_permission');
+  }
+  if (permissions[modePermission]?.effect !== 'allow') {
+    throw forbidden(`missing permission ${modePermission} on this device`, 'missing_device_permission');
+  }
 }

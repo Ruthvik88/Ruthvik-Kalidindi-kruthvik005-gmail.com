@@ -113,6 +113,20 @@ fixture + overlay (robin reboot allow at org, deny on dev_b row), suspended/no-m
 batched branches. No Q3 behavior touched — device-level code moved verbatim into
 evaluateScope.
 
+### 2026-09-27 · Phase 2 — delegates slice, check-permissions 35/35
+
+`can`/`assertCan`/`assertMayGrant`/`assertCanStartSession` as pure consumers: one
+`resolve()` each, zero new resolution logic, `evaluateScope`/`loadInputs` untouched
+(the prior 32 cases passing unchanged is the proof). Two ordering decisions: compound
+check reads `session:start` first so missing-both reports `missing_permission` (a caller
+who can't open sessions at all has a different problem than one refused on one device);
+`assertMayGrant` expands each pattern against the live catalogue and requires holding
+EVERY covered permission, so `device:*` can't launder one unheld perm. Self-grant
+rejection stays out — the signature never sees the target user; Phase 4 route's job.
+Also: deliberately not two `assertCan()` calls inside the compound check (two fetches,
+wrong reason strings). Full board: 35/35 permissions, 18/18 personalisation, 43/43 jwt,
+zero `todo(` refs. Reviewed against the §9 contract and approved.
+
 ## Phase 3 — orgs, members, invites
 
 _Anything you had to work out that no document states. Invite lifecycle states are a common
