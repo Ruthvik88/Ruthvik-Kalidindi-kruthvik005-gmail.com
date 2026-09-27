@@ -152,6 +152,18 @@ rank values), route calls it for current and new role. Ranks/roles read from tab
 _What happens at the boundary where two grants disagree, or where a grant's scope and the
 question's scope differ? Say what you predicted and what you got._
 
+### 2026-09-27 · Phase 3 — auth routes slice, HTTP harness 22/22 (reviewed, approved)
+
+`POST /auth/login|refresh|token` + `GET /auth/me`, all on top of existing primitives —
+no parallel permission logic (`/me` permissions come straight from `resolve()`).
+check-api auth sections green; the `no-token→401` 404 is a pipeline artifact (index.js
+404s unmatched routes before auth runs) that vanishes when devices routes land.
+Caught live during verification: first `/auth/token` draft 404'd unknown orgs → changed
+to one membership lookup, unknown and non-member both 401, so the endpoint never tells
+a caller which org ids exist. Refresh rows carry no org (schema, D12) → refresh mints
+for the login-default org; replay of a rotated token kills the whole family including
+the successor (verified). Default org = highest rank among active memberships.
+
 ## Phase 5 — sessions
 
 _Two permissions, one device. What did you have to resolve, and in what order, to keep the two

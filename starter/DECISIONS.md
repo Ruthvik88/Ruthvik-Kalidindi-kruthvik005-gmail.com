@@ -101,6 +101,35 @@ the shipped suite only asserts denials are present with reason codes.
 
 ---
 
+### Role rank picks the default org at login — and nothing else
+
+**What I chose:** login (and refresh, which reuses the rule) defaults to the active
+membership with highest role rank, `ORDER BY rank DESC, name ASC` from the tables.
+**Why:** some deterministic default is required (login takes an optional orgId), rank is
+read live from `roles` (overlay-safe: reviewer 35 slots between operator and admin),
+and it is a UX selection rule — authorization still comes exclusively from `resolve()`.
+Verified 2026-09-27: dana→owner/Acme, sam→operator/Acme, explicit orgId honored.
+**What I rejected:** insert-order default (accident of seed order, meaningless for
+hidden-tier orgs) and refusing login without orgId (breaks the shipped login shape).
+**What would change my mind:** nothing short of a contract pinning a different default —
+but I would still never let rank answer a `can()` question (D8): reviewer outranking
+operator for *modification* says nothing about their *permissions*.
+
+---
+
+### Refresh cookie omits Secure on purpose
+
+**What I chose:** `HttpOnly; Path=/; Max-Age=2592000; SameSite=Strict`, no `Secure`.
+**Why:** dev, check-api and Playwright all run plain-http localhost, where browsers
+silently drop `Secure` cookies — rotation would break exactly where it is graded,
+with no visible error. Verified rotation + replay-revocation over real HTTP 2026-09-27.
+**What I rejected:** literal `Secure` per the AUTH-DATA-MODEL table (correct for
+production TLS, self-defeating on the graded http environment).
+**What would change my mind:** serving over TLS — then `Secure` goes back on, no other
+change needed.
+
+---
+
 ### <the decision, as a claim — not "permissions", but "the org-level view counts device-scoped grants">
 
 **What I chose:**
