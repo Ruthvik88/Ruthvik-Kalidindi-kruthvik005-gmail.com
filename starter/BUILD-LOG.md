@@ -34,6 +34,15 @@ What did the starting line actually look like, and which failure surprised you?_
 _What did you expect each failure mode to look like before you ran it? Which one behaved
 differently from your expectation, and what did that tell you?_
 
+### 2026-09-27 · Phase 1 — verifyAccessToken green (43/43)
+
+Expected the payload-swap case to fail on payload validation. It fails earlier, on the
+signature check — the tampered payload never reaches claim validation, which is the point.
+Also almost missed that `exp == now` is expired (half-open, `<=`, not `<`), and that `jti`
+needs a non-empty-string check, not just presence. Fixed in `starter/server/auth.js`.
+Note: `pv`/staleness lives in `assertFresh`, not in the verifier; refresh-vs-access falls
+out of the 3-segment + JSON + HS256-pinned parse. `node scripts/check-jwt.js` is ALL PASS.
+
 ## Phase 2 — caller context and the resolution engine
 
 _This is where most people's first model is wrong. Write down the model you started with, the
