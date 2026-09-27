@@ -130,6 +130,38 @@ change needed.
 
 ---
 
+### Organization deletion is soft deletion + a liveness gate
+
+**What I chose:** `DELETE /v1/orgs/:org` sets `deleted_at`; every `:org` handler runs
+`assertOrgLive` (404) before `assertCan`.
+**Why:** hard deletion trips member FKs and orphans audit history, which must survive
+its subject. And a token outlives its org's deletion — context checks membership, not
+the org row — so without the gate a deleted org stays observable through live routes.
+Deletion changes visibility, not permission, hence 404-before-403 ordering. Verified
+2026-09-27: deleted org's token mints 401, cross-org 404 preserved.
+**What I rejected:** hard `DELETE` (FK violations with members present; destroys the
+audit trail the suite reads) and relying on context alone (passes deleted-org tokens).
+**What would change my mind:** a contract requiring org removal to cascade — the schema
+deliberately has no `ON DELETE CASCADE` toward organizations, so this would mean
+redesigning the schema, which is out of scope by rule.
+
+---
+
+### Created orgs get a deterministic rotating default theme
+
+**What I chose:** `POST /v1/orgs` without a theme assigns `PALETTE[live-count % len]`;
+explicit themes validated and honored.
+**Why:** the shipped create contract sends only `{name}`, so the server must supply a
+usable `data-org-theme` immediately for any client; sequential creates differ, which is
+what the console's at-a-glance distinction needs. Verified 2026-09-27.
+**What I rejected:** requiring theme client-side (breaks the shipped `{name}`-only
+create) and random assignment (unreproducible, can collide adjacently).
+**What would change my mind:** nothing about the default — but no uniqueness is
+claimed: create/delete histories can reuse palette entries; it is a rotating default,
+not a uniqueness guarantee.
+
+---
+
 ### <the decision, as a claim — not "permissions", but "the org-level view counts device-scoped grants">
 
 **What I chose:**

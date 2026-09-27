@@ -164,6 +164,29 @@ a caller which org ids exist. Refresh rows carry no org (schema, D12) → refres
 for the login-default org; replay of a rotated token kills the whole family including
 the successor (verified). Default org = highest rank among active memberships.
 
+### 2026-09-27 · Phase 3 — orgs group, HTTP harness 14/14 (reviewed, approved)
+
+`GET/POST /v1/orgs`, `PATCH/DELETE /v1/orgs/:org`, sharing auth.js `activeOrgs`
+helpers. Soft-delete (`deleted_at` — hard delete would trip member FKs and orphan
+audit history) plus `assertOrgLive` 404-first on `:org` routes, because a token
+outlives its org's deletion (context checks membership, not the org row). Default
+theme cycles a fixed palette by live-org count — sequential creates differ;
+explicit theme honored and validated. Integration catch fixed in-slice: soft-deleted
+org still minted via `/auth/token` (membership check lacked the org-liveness join);
+now unknown/non-member/deleted all 401 through one lookup, no existence branch.
+check-api org assertions green (create sole-owner, D18 404); no-token-401 and the
+devices abort are pipeline artifacts pending the devices group.
+
+`POST /auth/login|refresh|token` + `GET /auth/me`, all on top of existing primitives —
+no parallel permission logic (`/me` permissions come straight from `resolve()`).
+check-api auth sections green; the `no-token→401` 404 is a pipeline artifact (index.js
+404s unmatched routes before auth runs) that vanishes when devices routes land.
+Caught live during verification: first `/auth/token` draft 404'd unknown orgs → changed
+to one membership lookup, unknown and non-member both 401, so the endpoint never tells
+a caller which org ids exist. Refresh rows carry no org (schema, D12) → refresh mints
+for the login-default org; replay of a rotated token kills the whole family including
+the successor (verified). Default org = highest rank among active memberships.
+
 ## Phase 5 — sessions
 
 _Two permissions, one device. What did you have to resolve, and in what order, to keep the two

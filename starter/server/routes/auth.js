@@ -33,7 +33,7 @@ const readCookie = (req) => {
 
 // Active memberships with org + rank, best authority first. Rank orders the
 // DEFAULT org only — it never answers a permission question (D8).
-const activeOrgs = (db, userId) =>
+export const activeOrgs = (db, userId) =>
   db
     .prepare(
       `SELECT m.org_id AS orgId, m.role, m.perm_version AS permVersion,
@@ -46,7 +46,7 @@ const activeOrgs = (db, userId) =>
     )
     .all(userId);
 
-const orgEntries = (rows) => rows.map((r) => ({ id: r.orgId, name: r.name, theme: r.theme, role: r.role }));
+export const orgEntries = (rows) => rows.map((r) => ({ id: r.orgId, name: r.name, theme: r.theme, role: r.role }));
 
 const mintRefresh = (db, userId, familyId = newId('fam')) => {
   const raw = newRefreshToken();
@@ -141,7 +141,11 @@ export function registerAuthRoutes(router, { db, secret }) {
     const { orgId } = ctx.body ?? {};
     if (!orgId) throw badRequest('orgId is required');
     const membership = db
-      .prepare("SELECT role, perm_version AS permVersion FROM memberships WHERE user_id = ? AND org_id = ? AND status = 'active'")
+      .prepare(
+        `SELECT m.role, m.perm_version AS permVersion FROM memberships m
+           JOIN organizations o ON o.id = m.org_id AND o.deleted_at IS NULL
+          WHERE m.user_id = ? AND m.org_id = ? AND m.status = 'active'`
+      )
       .get(ctx.userId, orgId);
     if (!membership) throw unauthenticated('not a member of this org');
     send(res, 200, {
