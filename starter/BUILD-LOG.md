@@ -152,6 +152,21 @@ rank values), route calls it for current and new role. Ranks/roles read from tab
 _What happens at the boundary where two grants disagree, or where a grant's scope and the
 question's scope differ? Say what you predicted and what you got._
 
+### 2026-09-27 · Phase 3 — members group, HTTP harness 22/22 (reviewed, approved)
+
+7 endpoints sharing `removeMember`; gate order 404-visibility → 403-permission →
+actor-rules everywhere. Rank checked against current AND new role; demote bumps pv
+(stale-401) without touching live sessions (grandfathering). Suspend bumps pv too —
+so outstanding tokens go TOKEN_STALE, and the 403-empty-set path is resolve-level
+(shipped suite covers it). Three predictions wrong, all instructive: viewer HAS
+`user:read` (operator is the denial case); demoting sam flipped his default org to
+Globex (auditor 20 > viewer 10 — the rank rule working as designed, just not as I
+imagined); suspended tokens 401 rather than 403. One REAL bug caught: self-leave ran
+rank checks (admin self-leave 403'd on admin==admin) — self now skips permission+rank,
+keeps LAST_OWNER. DELETE `members/me` registered before `members/:userId`
+(first-match-wins trap). check-api members sections unreachable until sessions land —
+group order adjusted to devices → sessions → grants → invites → audit-list.
+
 ### 2026-09-27 · Phase 3 — auth routes slice, HTTP harness 22/22 (reviewed, approved)
 
 `POST /auth/login|refresh|token` + `GET /auth/me`, all on top of existing primitives —

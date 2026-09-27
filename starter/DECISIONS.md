@@ -162,6 +162,38 @@ not a uniqueness guarantee.
 
 ---
 
+### SELF_ROLE_CHANGE precedes hierarchy evaluation — deliberately, including over role validation
+
+**What I chose:** in `PATCH members/:userId`, selfhood is rejected before
+`assertRoleExists` and both `assertCanModify` calls — so self-assigning even a
+nonexistent role reports `SELF_ROLE_CHANGE`, not `unknown role`.
+**Why:** changing your own role is prohibited independently of hierarchy; checking it
+first gives one stable code however the roles compare (owner self→admin and admin
+self→owner both read identically as actor violations). Verified 2026-09-27.
+**What I rejected:** rank-first (result would vary with role pairs) and validation-first
+(would split self-violations across two codes by spelling of the role).
+**What would change my mind:** a contract case requiring `unknown role` to win over
+self — none exists; do not "clean up" the order without one.
+
+---
+
+### Suspension is a reversible status transition — LAST_OWNER does not apply
+
+**What I chose:** suspend/reinstate skip `assertNotLastOwner`; suspending the sole
+active owner leaves zero active owners with the owner membership intact.
+**Why:** the shipped suspension row lists `user:remove` + rank rules only — adding a
+409 invents policy the contract doesn't require. And suspension ≠ removal: the
+membership and role survive, so reinstate restores ownership; nothing is
+irreversible, unlike removal. `assertNotLastOwner` keeps its precise meaning:
+protecting the final active owner against removal/leave/demotion-out.
+**What I rejected:** guarding suspend with LAST_OWNER (would make a reversible admin
+action as heavy as destroying the membership).
+**What would change my mind:** a contract row or hidden test requiring sole-owner
+suspend to 409 — would implement as an explicit route check, never by widening
+`assertNotLastOwner`'s meaning.
+
+---
+
 ### <the decision, as a claim — not "permissions", but "the org-level view counts device-scoped grants">
 
 **What I chose:**
