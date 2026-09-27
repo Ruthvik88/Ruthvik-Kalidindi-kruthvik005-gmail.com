@@ -194,6 +194,26 @@ suspend to 409 — would implement as an explicit route check, never by widening
 
 ---
 
+### Device-scoped grants do not follow a device across orgs; decommission reuses the transfer end-reason
+
+**What I chose:** on transfer, device-scoped grants are revoked (not moved, not left),
+affected source users get `perm_version` bumps, sessions end `device_transferred`;
+on decommission, sessions also end `device_transferred`.
+**Why:** a device-scoped grant is authority bound to (user, org, device) — moving it
+would turn a source-org admin's decision into destination-org authority without
+destination consent; leaving it would keep resolving authority for a device the org no
+longer holds. Without the pv bump, pre-transfer tokens would carry stale authority to
+expiry. Decommission reuses the enum value only as the closest available terminal
+reason — transfer and decommission are NOT the same concept, and no new enum value or
+migration is warranted for the distinction. Verified 2026-09-27, 19/19.
+**What I rejected:** carrying grants to the destination (cross-org authority without
+consent), leaving them (phantom authority in the source org), hard-deleting either
+grants or devices (destroys the trail; trips FKs).
+**What would change my mind:** a contract case requiring grant portability on transfer
+— would need explicit destination-side consent semantics, not silent carry-over.
+
+---
+
 ### <the decision, as a claim — not "permissions", but "the org-level view counts device-scoped grants">
 
 **What I chose:**

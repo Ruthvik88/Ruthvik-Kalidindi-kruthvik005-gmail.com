@@ -14,9 +14,11 @@
 import { registerAuthRoutes } from './auth.js';
 import { registerOrgRoutes } from './orgs.js';
 import { registerMemberRoutes } from './members.js';
+import { registerDeviceRoutes } from './devices.js';
 
 export function registerRoutes(router, deps) {
   registerAuthRoutes(router, deps);
   registerOrgRoutes(router, deps);
   registerMemberRoutes(router, deps);
+  registerDeviceRoutes(router, deps);
 }

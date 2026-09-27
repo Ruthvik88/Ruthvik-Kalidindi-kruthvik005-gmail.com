@@ -207,6 +207,17 @@ the successor (verified). Default org = highest rank among active memberships.
 _Two permissions, one device. What did you have to resolve, and in what order, to keep the two
 failure reasons distinguishable?_
 
+### 2026-09-27 · Phase 3 — devices group, HTTP harness 19/19 (reviewed, approved)
+
+List (view-filtered rows, one `resolveDevices` batch), detail, provision (kind
+validated in code — CHECK would 500), update, soft-delete + session cascade,
+transfer with both-orgs provision check. Two bugs caught on re-read pre-verify:
+bare-`Error` throw (would 500 instead of 403) and body/params mix-up on `toOrgId`.
+Harness correction, not code: dana can't demo transfer to Globex (viewer there —
+correct 403); fresh-org pair used instead. check-api advanced as predicted:
+no-token-401 fixed itself, D6 rows + row-inclusion green; remaining reds are exactly
+the unimplemented groups (audit-list, sessions).
+
 ## Phase 6 — audit
 
 _What did you decide counts as an auditable event, and what pushed you to that line?_
