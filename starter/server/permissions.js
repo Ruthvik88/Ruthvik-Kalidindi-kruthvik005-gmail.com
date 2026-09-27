@@ -49,14 +49,13 @@ const matchesPattern = (permission, pattern) => {
   return permission === pattern;
 };
 
-// Resolve one user's permission set in one org. deviceId === null means the org-level
-// view; a deviceId means the exact per-device check.
-export function resolve(db, { userId, orgId, deviceId = null, now = new Date() }) {
-  const at = toIsoUtc(now); // fail fast on a bad `now`, before any query
-
-  // Fresh membership lookup, independent of context.js's copy: this function
-  // takes bare IDs (check-permissions.js calls it with no ctx), so it cannot
-  // borrow the pipeline's. One indexed row via UNIQUE(org_id, user_id).
+// One fetch for every authorization input: membership, catalogue, baseline,
+// live grants. Shared by resolve() and resolveDevices() so a list endpoint
+// pays it once no matter how many rows it renders (BRIEF.md §6).
+const loadInputs = (db, { userId, orgId, at }) => {
+  // Fresh membership lookup, independent of context.js's copy: resolution
+  // takes bare IDs, so it cannot borrow the pipeline's. One indexed row via
+  // UNIQUE(org_id, user_id).
   const membership = db
     .prepare('SELECT role, status FROM memberships WHERE org_id = ? AND user_id = ?')
     .get(orgId, userId);
@@ -67,24 +66,18 @@ export function resolve(db, { userId, orgId, deviceId = null, now = new Date() }
   const keys = db.prepare('SELECT key FROM permissions').all().map((r) => r.key);
 
   if (!membership || membership.status === 'removed' || membership.status === 'invited') {
-    return { role: null, permissions: denyAll(keys, 'not_a_member') };
-  }
-  if (membership.status === 'suspended') {
-    return { role: membership.role, permissions: denyAll(keys, 'suspended') };
+    return { membership: null, keys, baseline: new Set(), grantRows: [] };
   }
 
-  if (deviceId === null) throw todo('resolve (org-level branch)');
-
-  // --- device-level resolution for one device, active memberships -----------
   const baseline = new Set(
     db.prepare('SELECT permission FROM role_permissions WHERE role = ?').all(membership.role).map((r) => r.permission)
   );
 
-  // One fetch for every grant that could apply: this user, this org, live
-  // (revoked_at IS NULL hits grants_for_resolution), window half-open
-  // (starts_at <= now < expires_at, so expires_at == now is expired — D7).
-  // Named params so the two `now` bindings cannot be transposed. Scope is
-  // partitioned in JS below, so this same fetch serves the org-level slice.
+  // Every grant that could apply: this user, this org, live (revoked_at IS NULL
+  // hits grants_for_resolution), window half-open (starts_at <= now <
+  // expires_at, so expires_at == now is expired — D7). Named params so the two
+  // `now` bindings cannot be transposed. Scope is partitioned in JS, so this
+  // same fetch serves device-level, org-level, and batched evaluation.
   const grantRows = db
     .prepare(
       `SELECT g.id, g.device_id, g.effect, gp.permission AS pattern
@@ -95,6 +88,12 @@ export function resolve(db, { userId, orgId, deviceId = null, now = new Date() }
     )
     .all({ userId, orgId, now: at });
 
+  return { membership, keys, baseline, grantRows };
+};
+
+// Evaluate one scope: a deviceId for the exact per-device check, null for the
+// org-wide-only view (org-wide grants + baseline, no device dimension).
+const evaluateScope = ({ keys, baseline, role, grantRows }, deviceId) => {
   const permissions = {};
   for (const key of keys) {
     // A grant applies here if it covers the permission (exact or wildcard)
@@ -113,7 +112,7 @@ export function resolve(db, { userId, orgId, deviceId = null, now = new Date() }
       continue;
     }
     if (baseline.has(key)) {
-      permissions[key] = { effect: 'allow', source: `role:${membership.role}`, reason: null };
+      permissions[key] = { effect: 'allow', source: `role:${role}`, reason: null };
       continue;
     }
     const allow = applicable.find((g) => g.effect === 'allow');
@@ -123,13 +122,87 @@ export function resolve(db, { userId, orgId, deviceId = null, now = new Date() }
     }
     permissions[key] = { effect: 'deny', source: null, reason: 'implicit' };
   }
+  return permissions;
+};
 
-  return { role: membership.role, permissions };
+// Merge the org-wide view with one view per device into the org-level set:
+// "the union across all devices" (PERMISSIONS.md §3). Allow wins — if any row
+// shows the button, the nav entry must too; deny-wins here would let a row
+// allow what the nav denies, which is incoherent. Source precedence: the
+// baseline/org-wide answer first (broadest), else the first allowing device in
+// sorted id order (deterministic). deviceRows must arrive sorted by deviceId.
+const mergeOrgLevel = (keys, orgWide, deviceRows) => {
+  const permissions = {};
+  for (const key of keys) {
+    if (orgWide[key].effect === 'allow') {
+      permissions[key] = orgWide[key];
+      continue;
+    }
+    const hit = deviceRows.find((d) => d.permissions[key].effect === 'allow');
+    if (hit) {
+      permissions[key] = hit.permissions[key];
+      continue;
+    }
+    const deny =
+      orgWide[key].reason === 'explicit_deny'
+        ? orgWide[key]
+        : deviceRows.map((d) => d.permissions[key]).find((p) => p.reason === 'explicit_deny');
+    permissions[key] = deny ?? { effect: 'deny', source: null, reason: 'implicit' };
+  }
+  return permissions;
+};
+
+// Resolve one user's permission set in one org. deviceId === null means the org-level
+// view; a deviceId means the exact per-device check.
+export function resolve(db, { userId, orgId, deviceId = null, now = new Date() }) {
+  const at = toIsoUtc(now); // fail fast on a bad `now`, before any query
+  const { membership, keys, baseline, grantRows } = loadInputs(db, { userId, orgId, at });
+
+  if (!membership) {
+    return { role: null, permissions: denyAll(keys, 'not_a_member') };
+  }
+  if (membership.status === 'suspended') {
+    return { role: membership.role, permissions: denyAll(keys, 'suspended') };
+  }
+
+  const inputs = { keys, baseline, role: membership.role, grantRows };
+  if (deviceId !== null) {
+    return { role: membership.role, permissions: evaluateScope(inputs, deviceId) };
+  }
+
+  const orgWide = evaluateScope(inputs, null);
+  const deviceIds = db
+    .prepare('SELECT id FROM devices WHERE org_id = ? AND deleted_at IS NULL ORDER BY id')
+    .all(orgId)
+    .map((r) => r.id);
+  const deviceRows = deviceIds.map((id) => ({ deviceId: id, permissions: evaluateScope(inputs, id) }));
+  return { role: membership.role, permissions: mergeOrgLevel(keys, orgWide, deviceRows) };
 }
 
 // Batched form for list endpoints: { role, byDevice: { [deviceId]: permissions } }.
+// One shared fetch; each device is one in-JS evaluation, never one query per row.
 export function resolveDevices(db, { userId, orgId, deviceIds, now = new Date() }) {
-  throw todo('resolveDevices');
+  const at = toIsoUtc(now);
+  const { membership, keys, baseline, grantRows } = loadInputs(db, { userId, orgId, at });
+
+  if (!membership) {
+    return {
+      role: null,
+      byDevice: Object.fromEntries(deviceIds.map((id) => [id, denyAll(keys, 'not_a_member')])),
+    };
+  }
+  if (membership.status === 'suspended') {
+    return {
+      role: membership.role,
+      byDevice: Object.fromEntries(deviceIds.map((id) => [id, denyAll(keys, 'suspended')])),
+    };
+  }
+
+  const inputs = { keys, baseline, role: membership.role, grantRows };
+  return {
+    role: membership.role,
+    byDevice: Object.fromEntries(deviceIds.map((id) => [id, evaluateScope(inputs, id)])),
+  };
 }
 
 export function can(db, ctx, permission, deviceId) {

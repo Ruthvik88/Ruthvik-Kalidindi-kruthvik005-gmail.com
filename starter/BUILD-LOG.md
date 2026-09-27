@@ -100,6 +100,19 @@ D1 carve-out, `device:*` boundaries, expired/future inert, overlay allow+deny pa
 `void at/deviceId` markers removed now they're wired; org-level (`deviceId null`) still
 throws `NOT_IMPLEMENTED` — next slice is Q4 + union.
 
+### 2026-09-27 · Phase 2 — org union + resolveDevices, check-permissions 32/35
+
+Refactored to `loadInputs` (Q1+Q2+Q3 once) + `evaluateScope(deviceId|null)` + `mergeOrgLevel`,
+so `resolve()` and `resolveDevices()` share one fetch — list endpoints pay Q1/Q2/Q3 once
+however many rows render. Union is allow-wins with source precedence role > org-wide
+grant > first allowing device (sorted ids, deterministic). check-permissions.js: 32/35 —
+every resolve-scope case green including g_carve, wildcards, windows, suspended; the 3
+failures are all `assertCanStartSession`, still stubbed, next slice. check-personalisation
+18/18. Spot harness (deleted after): batched==single per device, union semantics on real
+fixture + overlay (robin reboot allow at org, deny on dev_b row), suspended/no-member
+batched branches. No Q3 behavior touched — device-level code moved verbatim into
+evaluateScope.
+
 ## Phase 3 — orgs, members, invites
 
 _Anything you had to work out that no document states. Invite lifecycle states are a common

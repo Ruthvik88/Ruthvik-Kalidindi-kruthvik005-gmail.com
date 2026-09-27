@@ -44,6 +44,27 @@ inert at its own device — none exists in the shipped suites; checked before co
 
 ---
 
+### Org-level union is allow-wins (existential), not deny-wins
+
+**What I chose:** org-level `permissions[P]` is allow iff any scope (org-wide view or any
+device row) allows it — `mergeOrgLevel` in `server/permissions.js`. Source precedence:
+baseline/org-wide answer first, else first allowing device in sorted id order.
+**Why:** UI coherence forces it: org-level gates nav while rows gate buttons. If any row
+shows Control, the nav entry must too — deny-wins would let a row allow what the nav
+denies. Verified 2026-09-27 on real fixture: viewer `session:start` allow at org (grant
+on lab-mac-01 only), robin `device:reboot` allow at org with `explicit_deny` on the dev_b
+row, sam `device:terminal` deny at org (org-wide deny, nothing allows anywhere).
+**What I rejected:** deny-wins across the union (breaks the coherence above), and
+org-wide-only evaluation (would deny viewer `session:start` at org level while the
+lab-mac row allows it — same incoherence). D1 tension noted: an org-wide deny + device
+allow yields allow at org but deny at that device — correct, because the questions differ
+("holds anywhere" vs "holds here"); the g_carve device-level case still denies.
+**What would change my mind:** a suite case pinning org-level deny where any device
+allows — none exists in the shipped suites (check-personalisation calls org-level
+resolve but asserts nothing about it; checked before committing).
+
+---
+
 ### <the decision, as a claim — not "permissions", but "the org-level view counts device-scoped grants">
 
 **What I chose:**
