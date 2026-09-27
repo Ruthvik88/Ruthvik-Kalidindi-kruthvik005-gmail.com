@@ -48,6 +48,21 @@ out of the 3-segment + JSON + HS256-pinned parse. `node scripts/check-jwt.js` is
 _This is where most people's first model is wrong. Write down the model you started with, the
 observation that broke it, and the model you moved to. Be specific about the observation._
 
+### 2026-09-27 · Phase 2 — buildContext drafted, reviewed, verified (15/15)
+
+Started assuming `authenticate(db, secret)` ran once at startup, so the `db.prepare()` sat
+inside it. Review caught it: `server/index.js:50` calls the outer function per request, so
+that was one SQL recompile per authenticated request. Moved the statement to module scope
+with `??=` — compiled once, results never cached, so no staleness question (`context.js`).
+Also dropped the `params.org ?? params.orgId` hedge for plain `params.org`: `router.js`
+populates keys from the `:name` in the pattern I register, so the fallback could only ever
+mask a misnamed param into silently skipping the 404 isolation check. Convention fixed now:
+org routes use `:org` (Phase 3 must follow it).
+Suspended passes through with a valid caller (`resolve()` denies all, reason `suspended`);
+removed/invited/no-row are 401. Verified with a throwaway stub-db harness (15 cases:
+header shapes, cross-org 404, stale pv, role-from-row) — real-DB check still blocked on
+the better-sqlite3 build-tools issue. Harness deleted after the run.
+
 ## Phase 3 — orgs, members, invites
 
 _Anything you had to work out that no document states. Invite lifecycle states are a common

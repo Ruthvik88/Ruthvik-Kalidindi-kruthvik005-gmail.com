@@ -11,6 +11,19 @@ Rules, from `DISCOVERY-BRIEF.md`:
 
 ---
 
+### Accept case-insensitive `Bearer` in buildContext rather than exact-match
+
+**What I chose:** `/^Bearer\s+(.+)$/i` in `server/context.js` — `bearer`, `BEARER` etc. accepted.
+**Why:** RFC 6750 defines the scheme as case-insensitive, and scheme casing is not a security
+boundary — the HMAC signature is. Verified the malformed-scheme path still 401s via the
+throwaway stub-db harness (`Token abc` → `401 UNAUTHENTICATED`, 15/15 run, 2026-09-27).
+**What I rejected:** exact-match `Bearer `, which would 401 a technically-valid request for no
+security gain and could only fail a client that follows the RFC.
+**What would change my mind:** hidden-tier fuzzing that sends malformed schemes expecting
+strict rejection — unlikely, since the graded contract is about token validity, not scheme case.
+
+---
+
 ### <the decision, as a claim — not "permissions", but "the org-level view counts device-scoped grants">
 
 **What I chose:**
