@@ -1,7 +1,5 @@
 // Append-only audit writes.
 //
-// YOURS TO WRITE. This file ships as a stub.
-//
 // audit_events has BEFORE UPDATE / BEFORE DELETE triggers, so this module only ever
 // INSERTs. Two things the spec is explicit about (BRIEF.md §4, PERMISSIONS.md §8):
 //
@@ -13,17 +11,49 @@
 // Schema columns: id, org_id (NOT NULL), actor_id, action, target_type, target_id,
 // result ('allow'|'deny'), reason_code, request_id, at.
 
-const todo = (name) =>
-  Object.assign(
-    new Error(`TODO: server/audit.js — ${name}() is yours to write (BRIEF.md §3).`),
-    { code: 'NOT_IMPLEMENTED' }
-  );
+import { HttpError } from './http.js';
+import { newId } from './db.js';
 
+// One row, one action. `at` is left to the schema default (strftime UTC) — the
+// signature carries no timestamp, and inventing one would add a field the
+// contract does not define. Call inside the same transaction as the mutation.
 export function audit(db, { orgId, actorId, action, targetType, targetId, result, reasonCode, requestId }) {
-  throw todo('audit');
+  db.prepare(
+    `INSERT INTO audit_events (id, org_id, actor_id, action, target_type, target_id, result, reason_code, request_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    newId('aud'),
+    orgId,
+    actorId ?? null,
+    action,
+    targetType ?? null,
+    targetId ?? null,
+    result,
+    reasonCode ?? null,
+    requestId ?? null
+  );
 }
 
-// Run fn(); if it refuses with a permission error, record the denial before rethrowing.
-export function auditDenials(db, ctx, meta, fn) {
-  throw todo('auditDenials');
+// Run fn(); if it refuses with a permission error (403), record the denial
+// before rethrowing. Anything else — 404s, validation, stale tokens — passes
+// through unlogged: a 404 is invisibility, not a denial, and logging it would
+// write existence-oracle rows into a log that audit:read holders can read.
+export async function auditDenials(db, ctx, meta, fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 403) {
+      audit(db, {
+        orgId: meta.orgId ?? ctx.orgId,
+        actorId: ctx.userId ?? null,
+        action: meta.action,
+        targetType: meta.targetType ?? null,
+        targetId: meta.targetId ?? null,
+        result: 'deny',
+        reasonCode: err.reason ?? err.code,
+        requestId: ctx.requestId ?? null,
+      });
+    }
+    throw err;
+  }
 }

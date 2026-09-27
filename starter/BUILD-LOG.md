@@ -132,6 +132,21 @@ zero `todo(` refs. Reviewed against the §9 contract and approved.
 _Anything you had to work out that no document states. Invite lifecycle states are a common
 source of this._
 
+### 2026-09-27 · Phase 3 — lifecycle.js + audit.js, harness 36/36 (reviewed, approved)
+
+Seven lifecycle helpers + two audit helpers, verified on real app.db / :memory: with a
+throwaway harness (deleted after). Two reds were both harness bugs, implementation
+untouched: (1) seeded live session `ses_live_build_server` inflated my end-count —
+forgot the fixture has an active sam session, rescoped the assertion to device level;
+(2) empty `:memory:` tripped the `actor_id` FK and masked the rethrown denial error —
+real routes always have an authenticated actor, seeded a minimal user row instead.
+Reconciliation worth keeping: §6 "equal role → 403" vs check-api:150 owner-demotes-owner
+→ 200. Resolved as owners-bypass-rank + explicit confer-owner rule (not emergent from
+rank values), route calls it for current and new role. Ranks/roles read from tables
+(reviewer 35 outranks operator 30 in-harness — no hardcoded matrix). auditDenials logs
+403 only: 404 is invisibility, and logging it would write an existence oracle into a log
+`audit:read` holders can read. Full board still green: 35/35, 18/18, 43/43.
+
 ## Phase 4 — devices and grants
 
 _What happens at the boundary where two grants disagree, or where a grant's scope and the

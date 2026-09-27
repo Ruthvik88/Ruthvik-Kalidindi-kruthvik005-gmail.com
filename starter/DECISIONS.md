@@ -82,6 +82,25 @@ granted", which is exactly this rule.
 
 ---
 
+### auditDenials records 403s only — 404s stay out of the audit log
+
+**What I chose:** `auditDenials` in `server/audit.js` writes a `deny` row for `HttpError`
+with `status === 403` and rethrows everything else unlogged.
+**Why:** a 404 means "invisible" (wrong org, absent, soft-deleted — PERMISSIONS.md §5),
+and the audit log is readable by `audit:read` holders. Logging failed lookups would turn
+the log into an existence oracle: "someone probed device X" confirms device X exists.
+Denials (`missing_permission`, `explicit_deny`) describe authority, not existence, so
+they are safe to record — and required (check-api.js:185-186 asserts denials with reason
+codes exist). Verified 2026-09-27: 403 logged with `reasonCode` from `err.reason`,
+404/success unlogged, original error rethrown identical.
+**What I rejected:** logging all errors (leaks existence), and logging nothing
+automatically (routes would each hand-roll denial writes — the double-write hazard the
+stub comment warns about: one action, one row).
+**What would change my mind:** a contract case requiring 404s in audit — none exists;
+the shipped suite only asserts denials are present with reason codes.
+
+---
+
 ### <the decision, as a claim — not "permissions", but "the org-level view counts device-scoped grants">
 
 **What I chose:**
