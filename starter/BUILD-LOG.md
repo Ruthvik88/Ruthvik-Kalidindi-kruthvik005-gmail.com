@@ -63,6 +63,21 @@ removed/invited/no-row are 401. Verified with a throwaway stub-db harness (15 ca
 header shapes, cross-org 404, stale pv, role-from-row) — real-DB check still blocked on
 the better-sqlite3 build-tools issue. Harness deleted after the run.
 
+### 2026-09-27 · Phase 2 — resolve() status-branches slice (17/17)
+
+No nvm in this environment and no MSVC tools, so Node stays 24 and real-DB testing
+stays blocked — stub-db harness again (deleted after the run). Slice covers Q1 + Q2
+only: fresh membership lookup per call (required, not wasteful — `resolve()` takes bare
+IDs, so it cannot borrow context.js's copy), catalogue read from `permissions` (overlay
+permission `widget:frobnicate` in the harness proves nothing is hardcoded), three status
+branches returning `{ role, permissions }` with `denyAll` maps. Active branch still throws
+`NOT_IMPLEMENTED` — that's the slice boundary, asserted in the harness, next commit.
+Deliberately no per-db statement cache yet: `resolve()` receives `db` per call (unlike
+`authenticate()`, which captures it once), so caching would need a WeakMap keyed by db —
+deferring that to the `resolveDevices` slice, where per-device prepare-sharing actually
+matters for the §6 "one query per row" rule. `toIsoUtc(now)` normalizes up front so the
+grants query's double-`now` binding (next slice) can never receive two formats.
+
 ## Phase 3 — orgs, members, invites
 
 _Anything you had to work out that no document states. Invite lifecycle states are a common
