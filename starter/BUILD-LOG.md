@@ -196,6 +196,18 @@ destructured `keys` from `resolve()`, which never returns it — every grant cre
 widening resolve's validated shape; triple-suite re-green proves no regression.
 Harnesses 14/14 grants + 5/5 sessions-expiry/idempotency (deleted after).
 
+### 2026-09-27 · Phase 3 — invites + audit-list, check-api 66/66 (reviewed, approved)
+
+Liveness in exactly one place (the invites row; no placeholder memberships —
+accept branches over no/inactive/active instead). Conditional-claim accept
+(`UPDATE … WHERE accepted_at IS NULL`, loser 409s) + constraint-caught
+double-create: races decided by the database in both directions. Peek is minimal
+`{orgName, role, email, expiresAt}`; peek-accepted 410 ("live?") vs
+accept-accepted 409 ("may I consume?"). Existing users attach on token alone,
+password ignored by decision not omission. Audit-list newest-first with
+defined-not-clamped pagination (default 100, max 1000). Full backend board:
+43/35/18/66, all green.
+
 `GET/POST /v1/orgs`, `PATCH/DELETE /v1/orgs/:org`, sharing auth.js `activeOrgs`
 helpers. Soft-delete (`deleted_at` — hard delete would trip member FKs and orphan
 audit history) plus `assertOrgLive` 404-first on `:org` routes, because a token

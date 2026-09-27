@@ -247,6 +247,57 @@ the table, not the reverse.
 
 ---
 
+### Invite liveness has one source of truth; accept is a conditional claim
+
+**What I chose:** no placeholder memberships; the invites row alone decides
+pending/accepted/revoked/expired, and accept claims via conditional
+`UPDATE … WHERE accepted_at IS NULL` inside the same transaction as the
+user/membership/token/audit writes.
+**Why:** placeholders would dual-track liveness across two tables that can only
+be kept consistent by convention; one row + one transaction cannot half-consume.
+The conditional claim (not select-then-update) is what makes concurrent double
+accepts deterministic — exactly one `changes === 1`. Double-create is the mirror:
+pre-checks for clean errors, partial unique index for the race. Verified by
+check-api reuse-409 plus review.
+**What I rejected:** `status='invited'` memberships (dual-tracked liveness),
+select-then-update claiming (TOCTOU between concurrent accepts).
+**What would change my mind:** a contract requiring placeholder memberships —
+would add them as a projection maintained in the same transactions, never as a
+second authority.
+
+---
+
+### Peek 410 vs accept 409, and passwords ignored for existing users
+
+**What I chose:** peek on a consumed invite → 410 (answers "is it live?"); accept on
+one → 409 (answers "may I consume?"). Accepting for an existing account ignores any
+supplied password — the token is the credential.
+**Why:** different questions deserve different codes; collapsing them would make the
+accept page unable to distinguish "gone" from "already used". Re-asking password on
+attach would invent a second login flow the contract never describes, while new
+accounts genuinely need name+password (NOT NULL columns). Verified via check-api
+peek/accept/reuse/login sequence.
+**What I rejected:** uniform 409/410 across both endpoints, and password-verifying
+existing users on attach.
+**What would change my mind:** a contract row pinning either behavior — the shipped
+suite only pins accept-reuse 409 and peek-minimality.
+
+---
+
+### Audit pagination: default 100, max 1000, never clamped
+
+**What I chose:** missing limit → 100, missing offset → 0; non-integers and
+out-of-range → 400; huge-but-valid offset → 200 with empty events.
+**Why:** "defined, not clamped" — silently narrowing `limit=99999` to the max
+would lie about what was asked. The numbers themselves are judgment calls inside
+the suite-pinned boundaries (1 and 200 pass; 0/-1/99999 fail).
+**What I rejected:** clamping (hides client bugs) and unbounded limits (one
+`?limit=999999999` shouldn't serialize the whole table).
+**What would change my mind:** a contract pinning specific numbers — would adopt
+them verbatim.
+
+---
+
 ### <the decision, as a claim — not "permissions", but "the org-level view counts device-scoped grants">
 
 **What I chose:**

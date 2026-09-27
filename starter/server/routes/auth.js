@@ -20,6 +20,7 @@ const COOKIE = 'refresh_token';
 // in DECISIONS.md: working rotation beats attribute literalism here.
 const cookieHeader = (raw) =>
   `${COOKIE}=${raw}; HttpOnly; Path=/; Max-Age=${REFRESH_TTL_SECONDS}; SameSite=Strict`;
+export { cookieHeader };
 const clearCookieHeader = () => `${COOKIE}=; HttpOnly; Path=/; Max-Age=0; SameSite=Strict`;
 
 const readCookie = (req) => {
@@ -48,7 +49,7 @@ export const activeOrgs = (db, userId) =>
 
 export const orgEntries = (rows) => rows.map((r) => ({ id: r.orgId, name: r.name, theme: r.theme, role: r.role }));
 
-const mintRefresh = (db, userId, familyId = newId('fam')) => {
+export const mintRefresh = (db, userId, familyId = newId('fam')) => {
   const raw = newRefreshToken();
   db.prepare(
     `INSERT INTO refresh_tokens (id, user_id, token_hash, family_id, expires_at)

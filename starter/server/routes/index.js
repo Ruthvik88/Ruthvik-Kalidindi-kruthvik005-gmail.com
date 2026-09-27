@@ -17,6 +17,8 @@ import { registerMemberRoutes } from './members.js';
 import { registerDeviceRoutes } from './devices.js';
 import { registerSessionRoutes } from './sessions.js';
 import { registerGrantRoutes } from './grants.js';
+import { registerInviteRoutes } from './invites.js';
+import { registerAuditRoutes } from './audit.js';
 
 export function registerRoutes(router, deps) {
   registerAuthRoutes(router, deps);
@@ -25,4 +27,6 @@ export function registerRoutes(router, deps) {
   registerDeviceRoutes(router, deps);
   registerSessionRoutes(router, deps);
   registerGrantRoutes(router, deps);
+  registerInviteRoutes(router, deps);
+  registerAuditRoutes(router, deps);
 }
