@@ -208,6 +208,35 @@ password ignored by decision not omission. Audit-list newest-first with
 defined-not-clamped pagination (default 100, max 1000). Full backend board:
 43/35/18/66, all green.
 
+## Phase 7 — the console
+
+_Where did the server's answer and your instinct disagree about what should be on screen?_
+
+### 2026-09-27 · Phase 7 — console, ui.spec.js 25/25 first run
+
+React SPA in `web/` (`api.js` token-in-memory client + `main.jsx`): `/auth/me`
+hydrates one `{user, org, role, orgs, permissions}` state; every gate reads
+`permissions[...].effect`, zero role branches. Org switch = token → me → rerender;
+boot tries refresh→me, else login. Two env fixes fell out on the way: production
+`/` 404'd on Windows (same `.pathname` bug as load-db — `server/index.js` DIST now
+`fileURLToPath`, third instance of the class), and Chromium wouldn't download (CDN
+timeouts) so the suite ran on system Chrome via a temp config, deleted after.
+Spec-forced details: `create-org` uses native `prompt()` (the test accepts a dialog),
+grant form uses user/device ids as option values, checkboxes keyed
+`data-permission-key`, session rows read snake_case `user_id`/`device_id`. 25/25
+including the intercept test (server-says-deny → element vanishes), both isolation
+tests, storage-absence, and reload-restore. Full board: 43/35/18/66/25.
+
+Liveness in exactly one place (the invites row; no placeholder memberships —
+accept branches over no/inactive/active instead). Conditional-claim accept
+(`UPDATE … WHERE accepted_at IS NULL`, loser 409s) + constraint-caught
+double-create: races decided by the database in both directions. Peek is minimal
+`{orgName, role, email, expiresAt}`; peek-accepted 410 ("live?") vs
+accept-accepted 409 ("may I consume?"). Existing users attach on token alone,
+password ignored by decision not omission. Audit-list newest-first with
+defined-not-clamped pagination (default 100, max 1000). Full backend board:
+43/35/18/66, all green.
+
 `GET/POST /v1/orgs`, `PATCH/DELETE /v1/orgs/:org`, sharing auth.js `activeOrgs`
 helpers. Soft-delete (`deleted_at` — hard delete would trip member FKs and orphan
 audit history) plus `assertOrgLive` 404-first on `:org` routes, because a token

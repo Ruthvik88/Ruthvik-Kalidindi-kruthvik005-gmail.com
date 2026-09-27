@@ -298,6 +298,23 @@ them verbatim.
 
 ---
 
+### The console renders server verdicts, never roles — proven by interception
+
+**What I chose:** every gate reads `permissions[P].effect === 'allow'` from `/auth/me`
+(org-level) or the device row's own map; `web/` contains no role→permission mapping,
+no `if (role === ...)` branches.
+**Why:** the shipped suite intercepts the devices response, flips one entry to deny,
+and requires the element to vanish — a client-side matrix would keep rendering and
+fail. That test pins *where* the decision is computed, not just its value, so the
+only passing structure is server-driven rendering. Verified 25/25 including both
+isolation tests and reload-restore from the httpOnly cookie.
+**What I rejected:** deriving visibility from `role` with a frontend matrix (fails the
+intercept test by construction), and disabled/greyed states (prohibited: absent DOM).
+**What would change my mind:** nothing — the inventory states the rule three ways
+(§1.1–1.3) and the suite enforces it mechanically.
+
+---
+
 ### <the decision, as a claim — not "permissions", but "the org-level view counts device-scoped grants">
 
 **What I chose:**
