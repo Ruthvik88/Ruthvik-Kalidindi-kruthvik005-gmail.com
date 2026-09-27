@@ -214,6 +214,39 @@ grants or devices (destroys the trail; trips FKs).
 
 ---
 
+### TTL expiry runs inside session creation, but exclusivity still rests on the index
+
+**What I chose:** `expireDueSessions` runs on reads AND inside the `POST /sessions`
+transaction before snapshot/insert; `SQLITE_CONSTRAINT_UNIQUE` still maps to 409.
+**Why:** without the POST pass, an expired-but-unretired exclusive holder 409s a
+create until some unrelated GET runs cleanup — access depending on incidental reads
+(caught pre-commit on review). The two mechanisms are not redundant: expiry aligns
+stored state with wall-clock TTL, the partial unique index alone is race-safe under
+concurrency. Verified 2026-09-27: planted expired holder, POST with no reads between
+→ 201.
+**What I rejected:** expiry-on-read-only (the T2–T6 staleness window above) and
+replacing the constraint with a pre-check (check-then-act races; the index is the
+guarantee per PERMISSIONS.md §7).
+**What would change my mind:** a background reaper — unnecessary; lazy expiry keeps
+one process, one port with no timers to defend.
+
+---
+
+### Grant validation order is frozen as observable contract
+
+**What I chose:** `grant:create` → self → target-member → device → known-patterns →
+timestamps → `assertMayGrant` → transaction, in exactly this order.
+**Why:** each step's error (403/404/400-unknown_permission/400-GRANT_EXPIRED/403) is
+externally observable, so reordering changes the API contract, not just the code.
+Notably patterns-validate-before-launder: unknown strings must 400, never reach the
+403 laundering check. Verified against AUTH-DATA-MODEL.md §8 row by row, 14/14.
+**What I rejected:** permission-first-for-everything (would 403 unknown patterns
+instead of the contracted 400) and FK-as-validator (SqliteError surfaces as 500).
+**What would change my mind:** a contract row reordering the table — the code follows
+the table, not the reverse.
+
+---
+
 ### <the decision, as a claim — not "permissions", but "the org-level view counts device-scoped grants">
 
 **What I chose:**

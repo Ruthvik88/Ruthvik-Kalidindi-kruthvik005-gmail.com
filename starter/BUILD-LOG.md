@@ -181,6 +181,21 @@ the successor (verified). Default org = highest rank among active memberships.
 
 ### 2026-09-27 · Phase 3 — orgs group, HTTP harness 14/14 (reviewed, approved)
 
+### 2026-09-27 · Phase 3 — sessions + grants groups (reviewed, approved with one change)
+
+Sessions: compound-check POST (201), session:view list newest-first, participant-
+or-permission detail/stop with the 404/403 ladder, idempotent stop preserving the
+first end reason. Exclusivity rests on the partial unique index (409 names holder);
+TTL enforced lazily on reads AND — added pre-commit on review — inside the POST
+transaction, so an expired unretired holder can't 409 a create until some GET runs
+cleanup. Grants: AUTH-§8 table order verbatim (create→self→target→device→patterns→
+windows→launder→tx), `unknown_permission`/`GRANT_EXPIRED` coded exactly, ?userId list,
+revoke-once (second 404s). Integration bug caught by harness: `assertMayGrant`
+destructured `keys` from `resolve()`, which never returns it — every grant create
+500'd. Fixed by querying the catalogue inside the delegate (cold path), NOT by
+widening resolve's validated shape; triple-suite re-green proves no regression.
+Harnesses 14/14 grants + 5/5 sessions-expiry/idempotency (deleted after).
+
 `GET/POST /v1/orgs`, `PATCH/DELETE /v1/orgs/:org`, sharing auth.js `activeOrgs`
 helpers. Soft-delete (`deleted_at` — hard delete would trip member FKs and orphan
 audit history) plus `assertOrgLive` 404-first on `:org` routes, because a token

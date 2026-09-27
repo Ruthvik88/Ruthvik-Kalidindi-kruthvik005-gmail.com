@@ -220,7 +220,11 @@ export function assertCan(db, ctx, permission, deviceId) {
 // Self-grants are rejected by the caller (the route knows the target user; this
 // function never sees it).
 export function assertMayGrant(db, ctx, patterns, deviceId = null) {
-  const { keys, permissions } = resolve(db, { userId: ctx.userId, orgId: ctx.orgId, deviceId });
+  const { permissions } = resolve(db, { userId: ctx.userId, orgId: ctx.orgId, deviceId });
+  // resolve() returns the map, not the catalogue: fetch keys separately rather
+  // than widening resolve's return shape (grant-create is a cold path; one
+  // extra tiny query beats changing a validated contract).
+  const keys = db.prepare('SELECT key FROM permissions').all().map((r) => r.key);
   for (const pattern of patterns) {
     const covered = keys.filter((k) => matchesPattern(k, pattern));
     if (covered.length === 0) throw forbidden(`cannot grant unknown permission pattern ${pattern}`, 'missing_permission');
