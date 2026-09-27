@@ -24,6 +24,26 @@ strict rejection — unlikely, since the graded contract is about token validity
 
 ---
 
+### Grant scope applies uniformly, regardless of permission kind
+
+**What I chose:** in `resolve()` device-level checks, a grant applies iff it covers the
+permission and is org-wide or scoped to exactly this device — for every permission
+uniformly, including `session:start` (device-scoped in the seed fixture:
+`grt_viewer_start_session`) and any overlay permission.
+**Why:** the seed proves "device-scoped" cannot mean "`device:`-prefixed only", and
+branching on permission kind would need a hardcoded device-permission list — the same
+hardcoding the overlay punishes. Real-DB run 2026-09-27: viewer `session:start` allow on
+lab-mac-01 / implicit-deny on qa-android-01, 17/17.
+**What I rejected:** ignoring `device_id` on non-`device:` permissions. It sounds principled
+(D6's inverse) but creates a second scope rule inside the one engine, and "ignore the
+grant" vs "ignore the scope" disagree with each other — a uniform rule has no such fork.
+Meaningless rows (device-scoped `audit:read`) are better refused at grant *creation*
+(Phase 4 validation) than special-cased at resolution.
+**What would change my mind:** a suite case where a device-scoped non-device grant must be
+inert at its own device — none exists in the shipped suites; checked before committing.
+
+---
+
 ### <the decision, as a claim — not "permissions", but "the org-level view counts device-scoped grants">
 
 **What I chose:**

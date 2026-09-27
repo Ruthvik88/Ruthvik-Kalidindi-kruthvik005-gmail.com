@@ -39,12 +39,20 @@ const toIsoUtc = (now) => new Date(now).toISOString();
 const denyAll = (keys, reason) =>
   Object.fromEntries(keys.map((k) => [k, { effect: 'deny', source: null, reason }]));
 
+// A grant pattern covers a permission if it names it exactly, names its
+// resource wildcard ('device:*' covers 'device:control'), or is the global
+// wildcard. The resource prefix comes from the pattern itself, so permissions
+// the prose never mentions (personalisation overlay) match with no special case.
+const matchesPattern = (permission, pattern) => {
+  if (pattern === '*') return true;
+  if (pattern.endsWith(':*')) return permission.startsWith(pattern.slice(0, -1));
+  return permission === pattern;
+};
+
 // Resolve one user's permission set in one org. deviceId === null means the org-level
 // view; a deviceId means the exact per-device check.
 export function resolve(db, { userId, orgId, deviceId = null, now = new Date() }) {
   const at = toIsoUtc(now); // fail fast on a bad `now`, before any query
-  void at; // bound by the grants query in the next slice; normalized here so every branch agrees
-  void deviceId;
 
   // Fresh membership lookup, independent of context.js's copy: this function
   // takes bare IDs (check-permissions.js calls it with no ctx), so it cannot
@@ -65,7 +73,58 @@ export function resolve(db, { userId, orgId, deviceId = null, now = new Date() }
     return { role: membership.role, permissions: denyAll(keys, 'suspended') };
   }
 
-  throw todo('resolve (active branch)');
+  if (deviceId === null) throw todo('resolve (org-level branch)');
+
+  // --- device-level resolution for one device, active memberships -----------
+  const baseline = new Set(
+    db.prepare('SELECT permission FROM role_permissions WHERE role = ?').all(membership.role).map((r) => r.permission)
+  );
+
+  // One fetch for every grant that could apply: this user, this org, live
+  // (revoked_at IS NULL hits grants_for_resolution), window half-open
+  // (starts_at <= now < expires_at, so expires_at == now is expired — D7).
+  // Named params so the two `now` bindings cannot be transposed. Scope is
+  // partitioned in JS below, so this same fetch serves the org-level slice.
+  const grantRows = db
+    .prepare(
+      `SELECT g.id, g.device_id, g.effect, gp.permission AS pattern
+         FROM grants g JOIN grant_permissions gp ON gp.grant_id = g.id
+        WHERE g.user_id = @userId AND g.org_id = @orgId AND g.revoked_at IS NULL
+          AND (g.starts_at IS NULL OR g.starts_at <= @now)
+          AND (g.expires_at IS NULL OR g.expires_at > @now)`
+    )
+    .all({ userId, orgId, now: at });
+
+  const permissions = {};
+  for (const key of keys) {
+    // A grant applies here if it covers the permission (exact or wildcard)
+    // and is org-wide or scoped to exactly this device. Scope is uniform
+    // across permission kinds: session:start grants are device-scoped in the
+    // seed fixture, so "device-scoped" cannot mean "device:-prefixed only".
+    const applicable = grantRows.filter(
+      (g) => matchesPattern(key, g.pattern) && (g.device_id === null || g.device_id === deviceId)
+    );
+
+    // D1: deny wins regardless of scope — an org-wide deny is visible here
+    // before any device-scoped allow, so carve-outs cannot happen.
+    const deny = applicable.find((g) => g.effect === 'deny');
+    if (deny) {
+      permissions[key] = { effect: 'deny', source: `grant:${deny.id}`, reason: 'explicit_deny' };
+      continue;
+    }
+    if (baseline.has(key)) {
+      permissions[key] = { effect: 'allow', source: `role:${membership.role}`, reason: null };
+      continue;
+    }
+    const allow = applicable.find((g) => g.effect === 'allow');
+    if (allow) {
+      permissions[key] = { effect: 'allow', source: `grant:${allow.id}`, reason: null };
+      continue;
+    }
+    permissions[key] = { effect: 'deny', source: null, reason: 'implicit' };
+  }
+
+  return { role: membership.role, permissions };
 }
 
 // Batched form for list endpoints: { role, byDevice: { [deviceId]: permissions } }.

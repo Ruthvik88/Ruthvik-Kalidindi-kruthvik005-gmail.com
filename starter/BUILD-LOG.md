@@ -78,6 +78,28 @@ deferring that to the `resolveDevices` slice, where per-device prepare-sharing a
 matters for the §6 "one query per row" rule. `toIsoUtc(now)` normalizes up front so the
 grants query's double-`now` binding (next slice) can never receive two formats.
 
+### 2026-09-27 · Env unblocked: portable Node 22 + load-db.js Windows fix
+
+No nvm here, so per the portable suggestion: downloaded Node v22.23.3 Windows binary
+zip (no install, no admin), prepended to PATH per-shell (`C:\Users\kruth\tools\`).
+`npm install` in `starter/` then finished in 4s off the prebuilt binary — no compilation.
+Two Windows-hostile bits in given plumbing: `npm run db:reset` uses `rm -f` (ran the
+equivalent manually instead — did NOT edit package.json), and `scripts/load-db.js:10`
+used `new URL(...).pathname`, which yields `/C:/...` on Windows and ENOENTs. Fixed with
+`fileURLToPath` (cross-platform safe, one line + import). Real DB now seeded: 3 orgs,
+20 permissions, overlay fingerprint bb339819425c (reviewer role, `device:reboot`).
+
+### 2026-09-27 · Phase 2 — resolve() device-level slice, real-DB harness 17/17
+
+Q3 + baselines + deny-first + wildcards + windows in one slice — windows/wildcards rode
+along because the fetch is a single query and testing half of a WHERE clause would prove
+nothing. Named params (`@now`) for the double-`now` bind; `matchesPattern` derives the
+resource from the pattern string, so `device:reboot` matches `device:*` with no special
+case. Verified against real app.db (rolled-back tx for inserts): all §11 vectors,
+D1 carve-out, `device:*` boundaries, expired/future inert, overlay allow+deny pair.
+`void at/deviceId` markers removed now they're wired; org-level (`deviceId null`) still
+throws `NOT_IMPLEMENTED` — next slice is Q4 + union.
+
 ## Phase 3 — orgs, members, invites
 
 _Anything you had to work out that no document states. Invite lifecycle states are a common
